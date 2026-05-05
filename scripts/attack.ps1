@@ -1,5 +1,5 @@
 param(
-  [string]$Target = "http://localhost:8082",
+  [string]$Target = "http://dvwa-vm:8080",
   [string]$OutDir = "scan-results",
   [switch]$Help
 )
@@ -8,8 +8,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # DVWA/WAF lab scanner.
-# It sends a fixed, transparent test corpus to a local DVWA lab endpoint and
-# reports block rates, bypass candidates, and false positives.
+# It sends a fixed, transparent test corpus to a DVWA lab endpoint and reports
+# block rates, successful attacks, failed attacks, and false positives.
 
 $SqliEndpoint = "/vulnerabilities/sqli/"
 $XssEndpoint = "/vulnerabilities/xss_r/"
@@ -24,15 +24,22 @@ Usage:
   powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 [-Target <url>] [-OutDir <dir>]
 
 Examples:
-  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8082
-  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8080 -OutDir reports\openwaf
-  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8081 -OutDir reports\dvwa-direct
+  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1
+  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8080 -OutDir reports\dvwa-direct
+  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8081 -OutDir reports\openwaf
+  powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8082 -OutDir reports\custom-waf
 
-Default target: http://localhost:8082
+Default target: http://dvwa-vm:8080
 
-The scanner is intended for your local DVWA/WAF lab only.
+The scanner is intended for your DVWA/WAF lab only.
 It classifies a request as blocked when the response status is 403, or when
 the body contains common WAF block-page markers.
+
+Attack result values:
+  reussi       malicious request was not blocked
+  failed       malicious request was blocked
+  faux_positif benign request was blocked
+  normal       benign request was allowed
 "@
 }
 
@@ -70,6 +77,24 @@ function Get-Verdict {
     return "false_positive"
   }
   return "allowed"
+}
+
+function Get-AttackResult {
+  param(
+    [string]$Expected,
+    [bool]$Blocked
+  )
+
+  if ($Expected -eq "block" -and $Blocked) {
+    return "failed"
+  }
+  if ($Expected -eq "block" -and -not $Blocked) {
+    return "reussi"
+  }
+  if ($Expected -eq "allow" -and $Blocked) {
+    return "faux_positif"
+  }
+  return "normal"
 }
 
 function Invoke-ScannerRequest {
@@ -134,6 +159,7 @@ function Add-ScanResult {
 
   $blocked = Test-BlockedResponse -StatusCode $Response.StatusCode -Body $Response.Body
   $verdict = Get-Verdict -Expected $Expected -Blocked $blocked
+  $attackResult = Get-AttackResult -Expected $Expected -Blocked $blocked
 
   $row = [pscustomobject]@{
     label = $Label
@@ -144,12 +170,13 @@ function Add-ScanResult {
     status = $Response.StatusCode
     blocked = $(if ($blocked) { "yes" } else { "no" })
     verdict = $verdict
+    attack_result = $attackResult
     duration_seconds = $Response.DurationSeconds
     bytes = $Response.Bytes
   }
 
   $Results.Add($row) | Out-Null
-  Write-Host ("{0,-24} {1,-8} status={2} blocked={3} verdict={4}" -f $Label, $Category, $Response.StatusCode, $row.blocked, $verdict)
+  Write-Host ("{0,-24} {1,-8} status={2} blocked={3} verdict={4} result={5}" -f $Label, $Category, $Response.StatusCode, $row.blocked, $verdict, $attackResult)
 }
 
 function Send-GetTest {
@@ -233,8 +260,8 @@ function Write-MarkdownReport {
   $sqliBlocked = @($sqli | Where-Object { $_.blocked -eq "yes" }).Count
   $xssBlocked = @($xss | Where-Object { $_.blocked -eq "yes" }).Count
   $benignBlocked = @($benign | Where-Object { $_.blocked -eq "yes" }).Count
-  $sqliBypass = @($sqli | Where-Object { $_.verdict -eq "bypass_candidate" }).Count
-  $xssBypass = @($xss | Where-Object { $_.verdict -eq "bypass_candidate" }).Count
+  $sqliSuccess = @($sqli | Where-Object { $_.attack_result -eq "reussi" }).Count
+  $xssSuccess = @($xss | Where-Object { $_.attack_result -eq "reussi" }).Count
 
   $lines = New-Object System.Collections.Generic.List[string]
   $lines.Add("# WAF Scan Report")
@@ -245,16 +272,16 @@ function Write-MarkdownReport {
   $lines.Add("")
   $lines.Add("## Summary")
   $lines.Add("")
-  $lines.Add("| Category | Total | Blocked | Bypass candidates | False positives | Rate |")
+  $lines.Add("| Category | Total | Blocked | Successful attacks | False positives | Rate |")
   $lines.Add("|---|---:|---:|---:|---:|---:|")
-  $lines.Add("| SQLi | $($sqli.Count) | $sqliBlocked | $sqliBypass | - | $(Get-Percent $sqliBlocked $sqli.Count)% |")
-  $lines.Add("| XSS | $($xss.Count) | $xssBlocked | $xssBypass | - | $(Get-Percent $xssBlocked $xss.Count)% |")
+  $lines.Add("| SQLi | $($sqli.Count) | $sqliBlocked | $sqliSuccess | - | $(Get-Percent $sqliBlocked $sqli.Count)% |")
+  $lines.Add("| XSS | $($xss.Count) | $xssBlocked | $xssSuccess | - | $(Get-Percent $xssBlocked $xss.Count)% |")
   $lines.Add("| Benign | $($benign.Count) | $benignBlocked | - | $benignBlocked | $(Get-Percent $benignBlocked $benign.Count)% |")
   $lines.Add("")
-  $lines.Add("## Bypass Candidates")
+  $lines.Add("## Successful Attacks")
   $lines.Add("")
 
-  foreach ($row in @($Results | Where-Object { $_.verdict -eq "bypass_candidate" })) {
+  foreach ($row in @($Results | Where-Object { $_.attack_result -eq "reussi" })) {
     $lines.Add("- ``$($row.label)`` [$($row.category)]: ``$($row.payload)``")
   }
 
@@ -262,7 +289,7 @@ function Write-MarkdownReport {
   $lines.Add("## False Positives")
   $lines.Add("")
 
-  foreach ($row in @($Results | Where-Object { $_.verdict -eq "false_positive" })) {
+  foreach ($row in @($Results | Where-Object { $_.attack_result -eq "faux_positif" })) {
     $lines.Add("- ``$($row.label)`` [$($row.category)]: ``$($row.payload)``")
   }
 
@@ -320,14 +347,14 @@ $benignRows = @($Results | Where-Object { $_.category -eq "benign" })
 $sqliBlockedRows = @($sqliRows | Where-Object { $_.blocked -eq "yes" })
 $xssBlockedRows = @($xssRows | Where-Object { $_.blocked -eq "yes" })
 $benignBlockedRows = @($benignRows | Where-Object { $_.blocked -eq "yes" })
-$sqliBypassRows = @($sqliRows | Where-Object { $_.verdict -eq "bypass_candidate" })
-$xssBypassRows = @($xssRows | Where-Object { $_.verdict -eq "bypass_candidate" })
+$sqliSuccessRows = @($sqliRows | Where-Object { $_.attack_result -eq "reussi" })
+$xssSuccessRows = @($xssRows | Where-Object { $_.attack_result -eq "reussi" })
 
 Write-Host ""
 Write-Host "== Summary =="
-Write-Host ("SQLi blocked:   {0}/{1} ({2}%), bypass candidates: {3}" -f $sqliBlockedRows.Count, $sqliRows.Count, (Get-Percent $sqliBlockedRows.Count $sqliRows.Count), $sqliBypassRows.Count)
-Write-Host ("XSS blocked:    {0}/{1} ({2}%), bypass candidates: {3}" -f $xssBlockedRows.Count, $xssRows.Count, (Get-Percent $xssBlockedRows.Count $xssRows.Count), $xssBypassRows.Count)
-Write-Host ("False positive: {0}/{1} ({2}%)" -f $benignBlockedRows.Count, $benignRows.Count, (Get-Percent $benignBlockedRows.Count $benignRows.Count))
+Write-Host ("SQLi failed:    {0}/{1} ({2}%), reussi: {3}" -f $sqliBlockedRows.Count, $sqliRows.Count, (Get-Percent $sqliBlockedRows.Count $sqliRows.Count), $sqliSuccessRows.Count)
+Write-Host ("XSS failed:     {0}/{1} ({2}%), reussi: {3}" -f $xssBlockedRows.Count, $xssRows.Count, (Get-Percent $xssBlockedRows.Count $xssRows.Count), $xssSuccessRows.Count)
+Write-Host ("Faux positif:   {0}/{1} ({2}%)" -f $benignBlockedRows.Count, $benignRows.Count, (Get-Percent $benignBlockedRows.Count $benignRows.Count))
 Write-Host ""
 Write-Host "CSV report:      $CsvFile"
 Write-Host "Markdown report: $MdFile"

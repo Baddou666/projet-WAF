@@ -1,104 +1,97 @@
-# Attack Scanner Report
+# Attack Script Description
 
-## Objective
+This document describes the purpose and behavior of `attack.sh` and
+`attack.ps1`. It is not an execution report and does not contain measured test
+results.
 
-The scanner tests the local DVWA/WAF lab and gathers hard data for comparison:
+## Purpose
 
-- SQL injection block rate
-- XSS block rate
-- bypass candidates
-- false positives on benign traffic
-- response status, response size, and request duration
+The scripts send a fixed set of HTTP requests to the DVWA lab through a target
+URL. The default target is:
 
-The script is intended for the local lab endpoints only:
+```text
+http://dvwa-vm:8080
+```
 
-- DVWA direct: `http://localhost:8081`
-- Open-source WAF: `http://localhost:8080`
-- Custom WAF: `http://localhost:8082`
+`dvwa-vm` is expected to resolve through Tailscale MagicDNS. The scripts can
+also receive another target URL when testing a different exposed port or WAF
+deployment.
 
-## Test Corpus
+The lab port mapping is:
 
-### SQLi
+| Target | Purpose |
+|---|---|
+| `http://dvwa-vm:8080` | DVWA direct |
+| `http://dvwa-vm:8081` | Open WAF |
+| `http://dvwa-vm:8082` | Custom WAF |
 
-The SQLi corpus contains classic and lightly obfuscated payloads:
+## Test Inputs
 
-- `UNION SELECT`
-- boolean tautologies
-- MySQL and PostgreSQL time-based probes
-- metadata probing through `information_schema`
-- stacked statements
-- inline comment obfuscation
-- double-encoded SQLi input
+The request set is split into three groups:
 
-### XSS
+- SQL injection payloads
+- XSS payloads
+- benign requests
 
-The XSS corpus contains reflected/stored XSS style payloads:
+The malicious payloads are expected to be blocked by the WAF. The benign
+requests are expected to pass without being blocked.
 
-- `<script>` tags
-- image `onerror`
-- SVG `onload`
-- `javascript:` links
-- `iframe srcdoc`
-- double-encoded script tags
-- HTML entity encoded script tags
+## Result Logic
 
-### Benign Traffic
+Each response is considered blocked when:
 
-The benign corpus is used to estimate false positives:
-
-- normal numeric IDs
-- harmless text containing words like `union` and `select`
-- apostrophes in names
-- normal guestbook messages
-- plain HTML/CSS text
-- mathematical comparison text
-
-## Classification Logic
-
-Each request is classified as blocked when:
-
-- HTTP status is `403`, or
-- the response body contains common WAF block markers such as `request blocked`,
+- the HTTP status code is `403`, or
+- the response body contains a common block marker such as `request blocked`,
   `custom waf`, `modsecurity`, `owasp`, `forbidden`, or `access denied`.
 
-Expected malicious requests that are not blocked are marked as:
+The scripts then assign an `attack_result` value:
 
+| Value | Meaning |
+|---|---|
+| `reussi` | a malicious request was not blocked |
+| `failed` | a malicious request was blocked |
+| `faux_positif` | a benign request was blocked |
+| `normal` | a benign request was allowed |
+
+The older technical `verdict` field is still written for detail:
+
+- `blocked`
 - `bypass_candidate`
-
-Expected benign requests that are blocked are marked as:
-
 - `false_positive`
+- `allowed`
 
-## Outputs
+## Generated Files
 
-Each run writes two files under the chosen output directory:
+Each run creates output files in the selected output directory:
 
 - `waf-scan-<timestamp>.csv`
 - `waf-scan-<timestamp>.md`
 
-The CSV contains one row per request. The Markdown file contains the summary
-table plus lists of bypass candidates and false positives.
+The CSV contains one row per request. The Markdown file summarizes the same run
+and lists successful attacks and false positives.
 
 ## Usage
 
 Shell:
 
 ```sh
-sh scripts/attack.sh http://localhost:8082
-sh scripts/attack.sh http://localhost:8080 reports/openwaf
-sh scripts/attack.sh http://localhost:8081 reports/dvwa-direct
+sh scripts/attack.sh
+sh scripts/attack.sh http://dvwa-vm:8080 reports/dvwa-direct
+sh scripts/attack.sh http://dvwa-vm:8081 reports/openwaf
+sh scripts/attack.sh http://dvwa-vm:8082 reports/custom-waf
 ```
 
 PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8082
-powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8080 -OutDir reports\openwaf
-powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8081 -OutDir reports\dvwa-direct
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8080 -OutDir reports\dvwa-direct
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8081 -OutDir reports\openwaf
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://dvwa-vm:8082 -OutDir reports\custom-waf
 ```
 
-## Current Execution Note
+## Scope
 
-At the time of this update, the local ports `8080`, `8081`, and `8082` did not
-respond from the Codex terminal, so no live block-rate numbers were generated.
-Start the Docker lab stack, then run either script to produce the live reports.
+These scripts are intended only for the controlled DVWA/WAF lab environment.
+They are documentation and test helpers for comparing WAF behavior, not a
+general-purpose attack tool.

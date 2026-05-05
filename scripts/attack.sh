@@ -2,10 +2,10 @@
 set -eu
 
 # DVWA/WAF lab scanner.
-# It sends a fixed, transparent test corpus to a local DVWA lab endpoint and
-# reports block rates, bypass candidates, and false positives.
+# It sends a fixed, transparent test corpus to a DVWA lab endpoint and reports
+# block rates, successful attacks, failed attacks, and false positives.
 
-TARGET="${1:-http://localhost:8082}"
+TARGET="${1:-http://dvwa-vm:8080}"
 OUT_DIR="${2:-scan-results}"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 CSV_FILE="${OUT_DIR}/waf-scan-${RUN_ID}.csv"
@@ -37,15 +37,22 @@ Usage:
   $0 [target_url] [output_dir]
 
 Examples:
-  $0 http://localhost:8082
-  $0 http://localhost:8080 reports/openwaf
-  $0 http://localhost:8081 reports/dvwa-direct
+  $0
+  $0 http://dvwa-vm:8080 reports/dvwa-direct
+  $0 http://dvwa-vm:8081 reports/openwaf
+  $0 http://dvwa-vm:8082 reports/custom-waf
 
-Default target: http://localhost:8082
+Default target: http://dvwa-vm:8080
 
-The scanner is intended for your local DVWA/WAF lab only.
+The scanner is intended for your DVWA/WAF lab only.
 It classifies a request as blocked when the response status is 403, or when
 the body contains common WAF block-page markers.
+
+Attack result values:
+  reussi       malicious request was not blocked
+  failed       malicious request was blocked
+  faux_positif benign request was blocked
+  normal       benign request was allowed
 EOF
 }
 
@@ -68,10 +75,11 @@ write_csv_row() {
   status="$6"
   blocked="$7"
   verdict="$8"
-  duration="$9"
-  bytes="${10}"
+  attack_result="$9"
+  duration="${10}"
+  bytes="${11}"
 
-  printf '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"\n' \
+  printf '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"\n' \
     "$(csv_escape "$label")" \
     "$(csv_escape "$category")" \
     "$(csv_escape "$method")" \
@@ -80,6 +88,7 @@ write_csv_row() {
     "$(csv_escape "$status")" \
     "$(csv_escape "$blocked")" \
     "$(csv_escape "$verdict")" \
+    "$(csv_escape "$attack_result")" \
     "$(csv_escape "$duration")" \
     "$(csv_escape "$bytes")" >> "$CSV_FILE"
 }
@@ -97,6 +106,21 @@ is_blocked_response() {
   fi
 
   return 1
+}
+
+get_attack_result() {
+  expected="$1"
+  blocked="$2"
+
+  if [ "$expected" = "block" ] && [ "$blocked" = "yes" ]; then
+    printf 'failed'
+  elif [ "$expected" = "block" ] && [ "$blocked" = "no" ]; then
+    printf 'reussi'
+  elif [ "$expected" = "allow" ] && [ "$blocked" = "yes" ]; then
+    printf 'faux_positif'
+  else
+    printf 'normal'
+  fi
 }
 
 record_count() {
@@ -166,10 +190,11 @@ send_get() {
   else
     verdict="allowed"
   fi
+  attack_result="$(get_attack_result "$expected" "$blocked")"
 
   record_count "$category" "$expected" "$blocked"
-  write_csv_row "$label" "$category" "GET" "$path" "$payload" "$status" "$blocked" "$verdict" "$duration" "$bytes"
-  printf '%-24s %-8s status=%s blocked=%s verdict=%s\n' "$label" "$category" "$status" "$blocked" "$verdict"
+  write_csv_row "$label" "$category" "GET" "$path" "$payload" "$status" "$blocked" "$verdict" "$attack_result" "$duration" "$bytes"
+  printf '%-24s %-8s status=%s blocked=%s verdict=%s result=%s\n' "$label" "$category" "$status" "$blocked" "$verdict" "$attack_result"
 }
 
 send_get_encoded() {
@@ -208,10 +233,11 @@ send_get_encoded() {
   else
     verdict="allowed"
   fi
+  attack_result="$(get_attack_result "$expected" "$blocked")"
 
   record_count "$category" "$expected" "$blocked"
-  write_csv_row "$label" "$category" "GET" "$path" "$payload_label" "$status" "$blocked" "$verdict" "$duration" "$bytes"
-  printf '%-24s %-8s status=%s blocked=%s verdict=%s\n' "$label" "$category" "$status" "$blocked" "$verdict"
+  write_csv_row "$label" "$category" "GET" "$path" "$payload_label" "$status" "$blocked" "$verdict" "$attack_result" "$duration" "$bytes"
+  printf '%-24s %-8s status=%s blocked=%s verdict=%s result=%s\n' "$label" "$category" "$status" "$blocked" "$verdict" "$attack_result"
 }
 
 send_post() {
@@ -252,10 +278,11 @@ send_post() {
   else
     verdict="allowed"
   fi
+  attack_result="$(get_attack_result "$expected" "$blocked")"
 
   record_count "$category" "$expected" "$blocked"
-  write_csv_row "$label" "$category" "POST" "$path" "$payload" "$status" "$blocked" "$verdict" "$duration" "$bytes"
-  printf '%-24s %-8s status=%s blocked=%s verdict=%s\n' "$label" "$category" "$status" "$blocked" "$verdict"
+  write_csv_row "$label" "$category" "POST" "$path" "$payload" "$status" "$blocked" "$verdict" "$attack_result" "$duration" "$bytes"
+  printf '%-24s %-8s status=%s blocked=%s verdict=%s result=%s\n' "$label" "$category" "$status" "$blocked" "$verdict" "$attack_result"
 }
 
 send_post_encoded() {
@@ -295,10 +322,11 @@ send_post_encoded() {
   else
     verdict="allowed"
   fi
+  attack_result="$(get_attack_result "$expected" "$blocked")"
 
   record_count "$category" "$expected" "$blocked"
-  write_csv_row "$label" "$category" "POST" "$path" "$payload_label" "$status" "$blocked" "$verdict" "$duration" "$bytes"
-  printf '%-24s %-8s status=%s blocked=%s verdict=%s\n' "$label" "$category" "$status" "$blocked" "$verdict"
+  write_csv_row "$label" "$category" "POST" "$path" "$payload_label" "$status" "$blocked" "$verdict" "$attack_result" "$duration" "$bytes"
+  printf '%-24s %-8s status=%s blocked=%s verdict=%s result=%s\n' "$label" "$category" "$status" "$blocked" "$verdict" "$attack_result"
 }
 
 pct() {
@@ -322,15 +350,15 @@ write_report() {
     printf '- Run ID: `%s`\n' "$RUN_ID"
     printf '- CSV: `%s`\n\n' "$CSV_FILE"
     printf '## Summary\n\n'
-    printf '| Category | Total | Blocked | Bypass candidates | False positives | Rate |\n'
+    printf '| Category | Total | Blocked | Successful attacks | False positives | Rate |\n'
     printf '|---|---:|---:|---:|---:|---:|\n'
     printf '| SQLi | %s | %s | %s | - | %s%% |\n' "$SQLI_TOTAL" "$SQLI_BLOCKED" "$SQLI_BYPASS" "$SQLI_RATE"
     printf '| XSS | %s | %s | %s | - | %s%% |\n' "$XSS_TOTAL" "$XSS_BLOCKED" "$XSS_BYPASS" "$XSS_RATE"
     printf '| Benign | %s | %s | - | %s | %s%% |\n\n' "$BENIGN_TOTAL" "$BENIGN_BLOCKED" "$BENIGN_BLOCKED" "$FP_RATE"
-    printf '## Bypass Candidates\n\n'
-    awk -F '","' 'NR > 1 && $8 ~ /bypass_candidate/ { gsub(/^"|"$/, "", $1); gsub(/^"|"$/, "", $2); gsub(/^"|"$/, "", $5); printf "- `%s` [%s]: `%s`\n", $1, $2, $5 }' "$CSV_FILE"
+    printf '## Successful Attacks\n\n'
+    awk -F '","' 'NR > 1 && $9 ~ /reussi/ { gsub(/^"|"$/, "", $1); gsub(/^"|"$/, "", $2); gsub(/^"|"$/, "", $5); printf "- `%s` [%s]: `%s`\n", $1, $2, $5 }' "$CSV_FILE"
     printf '\n## False Positives\n\n'
-    awk -F '","' 'NR > 1 && $8 ~ /false_positive/ { gsub(/^"|"$/, "", $1); gsub(/^"|"$/, "", $2); gsub(/^"|"$/, "", $5); printf "- `%s` [%s]: `%s`\n", $1, $2, $5 }' "$CSV_FILE"
+    awk -F '","' 'NR > 1 && $9 ~ /faux_positif/ { gsub(/^"|"$/, "", $1); gsub(/^"|"$/, "", $2); gsub(/^"|"$/, "", $5); printf "- `%s` [%s]: `%s`\n", $1, $2, $5 }' "$CSV_FILE"
   } > "$MD_FILE"
 }
 
@@ -339,7 +367,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-printf '"label","category","method","path","payload","status","blocked","verdict","duration_seconds","bytes"\n' > "$CSV_FILE"
+printf '"label","category","method","path","payload","status","blocked","verdict","attack_result","duration_seconds","bytes"\n' > "$CSV_FILE"
 
 printf '\n== Target: %s ==\n' "$TARGET"
 printf '== Writing: %s ==\n\n' "$CSV_FILE"
@@ -375,8 +403,8 @@ send_post "benign_math" "benign" "allow" "$XSS_ENDPOINT" "2 < 3 and 5 > 4"
 write_report
 
 printf '\n== Summary ==\n'
-printf 'SQLi blocked:   %s/%s (%s%%), bypass candidates: %s\n' "$SQLI_BLOCKED" "$SQLI_TOTAL" "$(pct "$SQLI_BLOCKED" "$SQLI_TOTAL")" "$SQLI_BYPASS"
-printf 'XSS blocked:    %s/%s (%s%%), bypass candidates: %s\n' "$XSS_BLOCKED" "$XSS_TOTAL" "$(pct "$XSS_BLOCKED" "$XSS_TOTAL")" "$XSS_BYPASS"
-printf 'False positive: %s/%s (%s%%)\n' "$BENIGN_BLOCKED" "$BENIGN_TOTAL" "$(pct "$BENIGN_BLOCKED" "$BENIGN_TOTAL")"
+printf 'SQLi failed:    %s/%s (%s%%), reussi: %s\n' "$SQLI_BLOCKED" "$SQLI_TOTAL" "$(pct "$SQLI_BLOCKED" "$SQLI_TOTAL")" "$SQLI_BYPASS"
+printf 'XSS failed:     %s/%s (%s%%), reussi: %s\n' "$XSS_BLOCKED" "$XSS_TOTAL" "$(pct "$XSS_BLOCKED" "$XSS_TOTAL")" "$XSS_BYPASS"
+printf 'Faux positif:   %s/%s (%s%%)\n' "$BENIGN_BLOCKED" "$BENIGN_TOTAL" "$(pct "$BENIGN_BLOCKED" "$BENIGN_TOTAL")"
 printf '\nCSV report:      %s\n' "$CSV_FILE"
 printf 'Markdown report: %s\n' "$MD_FILE"

@@ -3,12 +3,7 @@
   hosts: docker_hosts
   become: false
   gather_facts: yes
-  vars_files:
-    - vault.yml
   vars:
-    docker_registry_url: ghcr.io
-    docker_registry_username: dazinenoamane
-    docker_registry_password: "{{ vars['noamane-package-api'] }}"
     dvwa_waf_folder: "{{ ansible_user_dir }}/dvwa-with-waf"
 
   tasks:
@@ -28,13 +23,6 @@
         dest: "{{ dvwa_waf_folder }}/docker-compose.yml"
         mode: '0644'
 
-    - name: Authenticate Docker to GHCR
-      command: docker login "{{ docker_registry_url }}" --username "{{ docker_registry_username }}" --password-stdin
-      args:
-        stdin: "{{ docker_registry_password }}"
-      changed_when: false
-      no_log: true
-
     - name: Pull required Docker images
       command: docker compose pull
       args:
@@ -47,4 +35,4 @@
 
     - name: Show deployed compose directory
       debug:
-        msg: "DVWA with WAF deployed in {{ dvwa_waf_folder }} with GHCR login as {{ docker_registry_username }}"
+        msg: "DVWA with WAF deployed in {{ dvwa_waf_folder }}"

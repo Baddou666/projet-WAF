@@ -1,0 +1,74 @@
+services:
+  dvwa-db:
+    image: mariadb:10.11
+    container_name: local-dvwa-db
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: dvwa
+      MARIADB_USER: dvwa
+      MARIADB_PASSWORD: dvwa
+    volumes:
+      - local-dvwa-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: local-dvwa
+    depends_on:
+      dvwa-db:
+        condition: service_healthy
+    environment:
+      DB_SERVER: dvwa-db
+      DB_DATABASE: dvwa
+      DB_USER: dvwa
+      DB_PASSWORD: dvwa
+    ports:
+      - "8080:80"
+
+  openwaf:
+    build:
+      context: ./openwaf
+      dockerfile: Dockerfile
+    image: waf-open-source:local
+    container_name: local-openwaf
+    depends_on:
+      - dvwa
+    environment:
+      BACKEND: http://dvwa:80
+      PORT: 8080
+      SERVER_NAME: _
+      BLOCKING_PARANOIA: 1
+      ANOMALY_INBOUND: 5
+      ANOMALY_OUTBOUND: 4
+      MODSEC_RULE_ENGINE: "On"
+      MODSEC_REQ_BODY_ACCESS: "On"
+      MODSEC_RESP_BODY_ACCESS: "Off"
+      MODSEC_AUDIT_ENGINE: RelevantOnly
+      MODSEC_AUDIT_LOG_FORMAT: JSON
+    ports:
+      - "8081:8080"
+
+  customwaf:
+    build:
+      context: ./custom-waf
+      dockerfile: Dockerfile
+    image: waf-custom:local
+    container_name: local-customwaf
+    depends_on:
+      - dvwa
+    environment:
+      LISTEN_PORT: 8082
+      UPSTREAM_URL: http://dvwa:80
+      LOG_FILE: /var/log/custom-waf/waf.log
+    ports:
+      - "8082:8082"
+    volumes:
+      - local-custom-waf-logs:/var/log/custom-waf
+
+volumes:
+  local-dvwa-db-data:
+  local-custom-waf-logs:

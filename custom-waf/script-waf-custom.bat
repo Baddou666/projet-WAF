@@ -71,7 +71,7 @@ pause
 exit /b
 
 :build_and_push
-echo [1/4] Construction de l'image Docker...
+echo [1/3] Construction de l'image Docker...
 docker build -f Dockerfile -t waf-custom:latest .
 
 if %errorlevel% neq 0 (
@@ -80,7 +80,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo [2/4] Liste des images generees :
+echo [2/3] Liste des images generees :
 docker images | findstr "waf-custom"
 
 goto choose_version
@@ -136,22 +136,7 @@ if "%3"=="" (
 )
 set IMAGE_TAG=%BASE_TAG%:%tag%
 
-:: Verification de la cle API
-if "%gitapi%"=="" (
-    echo [ERREUR] La variable d'environnement gitapi n'est pas definie. Authentification impossible.
-    pause
-    exit /b
-)
-
-echo [3/4] Authentification a GHCR...
-echo %gitapi% | docker login ghcr.io -u dazinenoamane --password-stdin
-if %errorlevel% neq 0 (
-    echo [ERREUR] Echec de l'authentification a GHCR.
-    pause
-    exit /b
-)
-
-echo [4/4] Tag et push de l'image...
+echo [3/3] Tag et push de l'image...
 docker tag waf-custom:latest %IMAGE_TAG%
 docker push %IMAGE_TAG%
 
