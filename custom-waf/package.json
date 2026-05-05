@@ -1,0 +1,13 @@
+{
+  "name": "custom-waf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Custom reverse-proxy WAF for the WAF project",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
