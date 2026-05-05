@@ -17,8 +17,8 @@ provider "proxmox" {
     password = var.proxmox_password
     agent = true
     node {
-      name    = "pve"
-      address = "pve.tail2c3ac8.ts.net"
+      name    = "fanida"
+      address = "fanida"
     }
   }
 }
