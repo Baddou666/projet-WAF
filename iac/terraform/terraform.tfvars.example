@@ -17,7 +17,7 @@ ip_address = "<IP/CIDR>"
 gateway    = "<GATEWAY-IP>"
 
 ci_user        = "ubuntu"
-ssh_public_key_path = "<run on devbox ssh-keygen and past the public key path like /root/.ssh/id_rsa>"
+ssh_public_key_path = "<run on devbox ssh-keygen and paste the public key path like /root/.ssh/id_rsa>"
 ts-auth-key = "<tailscale auth key (you need to have a tailnet in order to acces to the vm or use jump host from the proxmox server)>"
 
 ubuntu_image_file_id = "local:iso/<ubuntu img (not iso !!!)>"
