@@ -1,0 +1,31 @@
+---
+- name: Deploy DVWA containers
+  hosts: dvwa_host
+  gather_facts: yes
+
+  tasks:
+    - name: Create dvwa directory
+      file:
+        path: ~/dvwa
+        state: directory
+        mode: '0755'
+
+    - name: Copy docker-compose.yml to dvwa directory
+      copy:
+        src: ./dvwa/docker-compose.yml
+        dest: ~/dvwa/docker-compose.yml
+        mode: '0644'
+
+    - name: Pull docker images
+      command: docker compose pull
+      args:
+        chdir: ~/dvwa
+
+    - name: Run docker compose up
+      command: docker compose up -d
+      args:
+        chdir: ~/dvwa
+
+    - name: Display DVWA deployment status
+      debug:
+        msg: "DVWA deployment completed successfully"

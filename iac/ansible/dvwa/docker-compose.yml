@@ -1,0 +1,29 @@
+services:
+  db:
+    image: mysql:5.7
+    container_name: dvwa-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: dvwa
+      MYSQL_USER: dvwa
+      MYSQL_PASSWORD: dvwa
+    volumes:
+      - db_data:/var/lib/mysql
+
+  dvwa:
+    image: vulnerables/web-dvwa
+    container_name: dvwa
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      - DB_SERVER=db
+      - DB_DATABASE=dvwa
+      - DB_USER=dvwa
+      - DB_PASSWORD=dvwa
+    restart: unless-stopped
+
+volumes:
+  db_data:
