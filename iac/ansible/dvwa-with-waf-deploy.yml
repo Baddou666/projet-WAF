@@ -1,5 +1,5 @@
 ---
-- name: Deploy DVWA + open-source WAF with Docker Compose
+- name: Deploy DVWA with WAF using Docker Compose
   hosts: docker_hosts
   become: false
   gather_facts: yes
@@ -9,23 +9,23 @@
     docker_registry_url: ghcr.io
     docker_registry_username: dazinenoamane
     docker_registry_password: "{{ vars['noamane-package-api'] }}"
-    dvwa_folder: "{{ ansible_user_dir }}/dvwa-with-opnsrc-waf"
+    dvwa_waf_folder: "{{ ansible_user_dir }}/dvwa-with-waf"
 
   tasks:
     - name: Verify Docker is usable by the Ansible user
       command: docker info
       changed_when: false
 
-    - name: Create remote DVWA deployment directory
+    - name: Create remote DVWA with WAF deployment directory
       file:
-        path: "{{ dvwa_folder }}"
+        path: "{{ dvwa_waf_folder }}"
         state: directory
         mode: '0755'
 
-    - name: Copy DVWA WAF compose directory to remote host
+    - name: Copy DVWA with WAF compose file to remote host
       copy:
-        src: ./dvwa-with-opnsrc-waf/docker-compose.yml
-        dest: "{{ dvwa_folder }}/docker-compose.yml"
+        src: ./dvwa-with-waf/docker-compose.yml
+        dest: "{{ dvwa_waf_folder }}/docker-compose.yml"
         mode: '0644'
 
     - name: Authenticate Docker to GHCR
@@ -38,13 +38,13 @@
     - name: Pull required Docker images
       command: docker compose pull
       args:
-        chdir: "{{ dvwa_folder }}"
+        chdir: "{{ dvwa_waf_folder }}"
 
     - name: Start DVWA and WAF containers
       command: docker compose up -d
       args:
-        chdir: "{{ dvwa_folder }}"
+        chdir: "{{ dvwa_waf_folder }}"
 
     - name: Show deployed compose directory
       debug:
-        msg: "DVWA/WAF deployed in {{ dvwa_folder }} with GHCR login as {{ docker_registry_username }}"
+        msg: "DVWA with WAF deployed in {{ dvwa_waf_folder }} with GHCR login as {{ docker_registry_username }}"

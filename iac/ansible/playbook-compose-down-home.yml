@@ -1,0 +1,34 @@
+---
+- name: Stop Docker Compose projects found in the Ansible user's home
+  hosts: docker_hosts
+  become: false
+  gather_facts: yes
+
+  tasks:
+    - name: Find docker-compose.yml files in direct home subdirectories
+      find:
+        paths: "{{ ansible_user_dir }}"
+        patterns: docker-compose.yml
+        file_type: file
+        recurse: yes
+        depth: 2
+      register: compose_files
+
+    - name: Stop each Docker Compose project
+      command: docker compose down
+      args:
+        chdir: "{{ item.path | dirname }}"
+      loop: "{{ compose_files.files }}"
+      loop_control:
+        label: "{{ item.path | dirname }}"
+      when: compose_files.matched | int > 0
+
+    - name: Show stopped Compose project directories
+      debug:
+        msg: "{{ compose_files.files | map(attribute='path') | map('dirname') | list }}"
+      when: compose_files.matched | int > 0
+
+    - name: Show no Compose projects found
+      debug:
+        msg: "No docker-compose.yml files found in {{ ansible_user_dir }} direct subdirectories."
+      when: compose_files.matched | int == 0
