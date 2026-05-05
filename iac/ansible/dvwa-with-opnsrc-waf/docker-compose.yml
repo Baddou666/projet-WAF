@@ -32,6 +32,18 @@ services:
     container_name: openwaf
     depends_on:
       - dvwa
+    environment:
+      BACKEND: http://dvwa:80
+      PORT: 8080
+      SERVER_NAME: _
+      BLOCKING_PARANOIA: 1
+      ANOMALY_INBOUND: 5
+      ANOMALY_OUTBOUND: 4
+      MODSEC_RULE_ENGINE: "On"
+      MODSEC_REQ_BODY_ACCESS: "On"
+      MODSEC_RESP_BODY_ACCESS: "Off"
+      MODSEC_AUDIT_ENGINE: RelevantOnly
+      MODSEC_AUDIT_LOG_FORMAT: JSON
     ports:
       - "8080:8080"
 
