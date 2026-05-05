@@ -1,0 +1,23 @@
+proxmox_endpoint = "https://<PROXMOX-HOST>:8006/api2/json"
+proxmox_username = "root@pam"
+proxmox_password = "<PROXMOX-ROOT-PASS>"
+
+node_name = "<node-name>"
+vm_name   = "dvwa-vm"
+
+cpu_cores = 1
+memory    = 2048
+
+disk_size = 20
+storage   = "local-lvm"
+
+bridge = "vmbr0"
+
+ip_address = "<IP/CIDR>"
+gateway    = "<GATEWAY-IP>"
+
+ci_user        = "ubuntu"
+ssh_public_key_path = "<run on devbox ssh-keygen and past the public key path like /root/.ssh/id_rsa>"
+ts-auth-key = "<tailscale auth key (you need to have a tailnet in order to acces to the vm or use jump host from the proxmox server)>"
+
+ubuntu_image_file_id = "local:iso/<ubuntu img (not iso !!!)>"

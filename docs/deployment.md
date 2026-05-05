@@ -1,19 +1,62 @@
 # Deploiement
 
-## Principe
+## 1. Deploiement Local
+
+Le moyen le plus simple de tester le projet est la stack locale. Elle build les
+deux WAF depuis le code du depot et expose les memes ports que la VM.
+
+Depuis la racine du projet:
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+Services exposes:
+
+| URL | Service |
+|---|---|
+| `http://localhost:8080` | DVWA direct |
+| `http://localhost:8081` | Open WAF local |
+| `http://localhost:8082` | Custom WAF local |
+
+Pour lancer les scans locaux:
+
+```bash
+sh scripts/attack.sh http://localhost:8080 scripts/reports/local-dvwa-direct
+sh scripts/attack.sh http://localhost:8081 scripts/reports/local-openwaf
+sh scripts/attack.sh http://localhost:8082 scripts/reports/local-custom-waf
+```
+
+Sous PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8080 -OutDir scripts\reports\local-dvwa-direct
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8081 -OutDir scripts\reports\local-openwaf
+powershell -ExecutionPolicy Bypass -File scripts\attack.ps1 -Target http://localhost:8082 -OutDir scripts\reports\local-custom-waf
+```
+
+Pour arreter la stack locale:
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+## 2. Deploiement Sur Proxmox
 
 Terraform et Ansible sont executes depuis une devbox Docker fournie par le
 projet. La machine hote n'a donc pas besoin d'installer directement Terraform ou
 Ansible.
 
-La machine hote doit surtout disposer de:
+La machine hote doit disposer de:
 
-- Docker, pour lancer la devbox et construire les images WAF;
+- Docker, pour lancer la devbox;
 - un acces reseau vers Proxmox;
-- un acces reseau/SSH vers `dvwa-vm`;
-- un acces GHCR seulement si les images doivent etre publiees.
+- un acces reseau/SSH vers `dvwa-vm`.
 
-## Devbox IaC
+Les images WAF utilisees par la VM sont des packages GHCR publics deja
+disponibles. Le deploiement Proxmox ne build pas les images.
+
+## 3. Devbox IaC
 
 La devbox est definie par:
 
@@ -40,9 +83,9 @@ Dans le conteneur, le dossier `iac/` est monte sous:
 /root/host
 ```
 
-Les commandes Terraform et Ansible doivent donc etre lancees depuis ce montage.
+Les commandes Terraform et Ansible doivent etre lancees depuis ce montage.
 
-## Provisionnement Terraform
+## 4. Provisionnement Terraform
 
 Les fichiers Terraform se trouvent dans:
 
@@ -63,7 +106,7 @@ Variables importantes:
 | `ssh_public_key_path` | cle publique injectee dans la VM |
 | `ts-auth-key` | cle d'authentification Tailscale |
 
-Commandes usuelles depuis la devbox:
+Commandes depuis la devbox:
 
 ```bash
 cd /root/host/terraform
@@ -72,7 +115,7 @@ terraform plan
 terraform apply
 ```
 
-## Installation Docker Sur La VM
+## 5. Installation Docker Sur La VM
 
 Depuis la devbox:
 
@@ -93,7 +136,7 @@ Ce playbook:
 Si Docker reste inaccessible sans sudo, reconnecter la session SSH ou relancer
 le playbook apres quelques secondes.
 
-## Deploiement DVWA Avec WAF
+## 6. Deploiement DVWA Avec WAF Sur La VM
 
 Depuis la devbox:
 
@@ -110,9 +153,7 @@ Le playbook:
 - lance `docker compose pull`;
 - lance `docker compose up -d`.
 
-## Services Exposes
-
-Apres deploiement:
+Services exposes sur la VM:
 
 | URL | Service |
 |---|---|
@@ -120,7 +161,7 @@ Apres deploiement:
 | `http://dvwa-vm:8081` | Open WAF |
 | `http://dvwa-vm:8082` | Custom WAF |
 
-## Arret Des Stacks Compose
+## 7. Arret Des Stacks Compose Sur La VM
 
 Pour arreter les projets Docker Compose trouves dans les dossiers directs du
 home de l'utilisateur Ansible:
@@ -129,29 +170,3 @@ home de l'utilisateur Ansible:
 cd /root/host/ansible
 ansible-playbook -i inventory.ini playbook-compose-down-home.yml
 ```
-
-## Build Et Push Des Images WAF
-
-Les scripts de build/push sont lances depuis la machine hote Windows, pas
-depuis la devbox IaC.
-
-Open WAF:
-
-```powershell
-cd openwaf
-.\script-waf-opensrc.bat buildpush final latest
-```
-
-Custom WAF:
-
-```powershell
-cd custom-waf
-.\script-waf-custom.bat buildpush final latest
-```
-
-Les packages GHCR sont supposes publics pour le deploiement. Aucun `docker
-login` n'est execute par Ansible.
-
-Pour publier une nouvelle image avec les scripts `buildpush`, Docker doit deja
-etre authentifie sur la machine hote si le registre le demande. Les scripts ne
-declenchent aucune authentification Docker.
