@@ -25,7 +25,7 @@ const rules = [
     severity: "critical",
     score: 7,
     name: "Boolean tautology injection",
-    pattern: /(?:'|"|`|\)|\b\d+\b)\s*(?:or|and)\s*(?:\d+\s*=\s*\d+|'[^']*'\s*=\s*'[^']*'|"[^"]*"\s*=\s*"[^"]*"|\w+\s+like\s+\w+)/i,
+    pattern: /(?:'|"|`|\)|\b\d+\b)\s*(?:or|and)\s*(?:\d+\s*=\s*\d+|'[^']*'\s*=\s*'[^']*|"[^"]*"\s*=\s*"[^"]*"|\w+\s+like\s+\w+)/i,
   },
   {
     id: "SQLI-003",
