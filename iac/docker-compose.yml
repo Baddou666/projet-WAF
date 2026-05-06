@@ -1,7 +1,7 @@
 #permet de pouvoir executer appliquer terraform et ansible depuis n'importe qu'elle machine
 #Créer l'image ou l'éxécuter: docker compose up -d
 #forcer un rebuild de l'image: docker compose build
-#attacher le terminal: docker exec -it linux-devbox bash
+#attacher le terminal: docker exec -it waf-devbox bash
 services:
   devbox:
     build: .
