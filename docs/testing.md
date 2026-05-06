@@ -151,6 +151,43 @@ scripts/reports/openwaf/
 scripts/reports/custom-waf/
 ```
 
+## Logs Du Custom WAF
+
+Le Custom WAF ecrit ses blocages au format JSON Lines: chaque ligne est un
+objet JSON independant.
+
+Exemple de structure:
+
+```json
+{
+  "timestamp": "2026-05-05T20:34:22.398Z",
+  "attackerIp": "100.118.186.33",
+  "requestLine": "GET /vulnerabilities/sqli/?id=...",
+  "triggeredRules": ["SQLI-002"],
+  "maliciousPayload": "/vulnerabilities/sqli/?id=..."
+}
+```
+
+Champs:
+
+| Champ | Description |
+|---|---|
+| `timestamp` | date UTC ISO-8601 du blocage |
+| `attackerIp` | adresse IP vue par le WAF |
+| `requestLine` | methode HTTP et chemin demande |
+| `triggeredRules` | liste des IDs de regles declenchees |
+| `maliciousPayload` | valeur ou URI consideree comme malveillante |
+
+Dans le conteneur, le chemin configure par defaut est:
+
+```text
+/var/log/custom-waf/waf.log
+```
+
+Dans les stacks Compose, ce chemin peut etre monte dans un volume Docker afin
+de conserver les logs du Custom WAF. Les fichiers de logs locaux generes pendant
+les tests ne font pas partie des livrables du projet.
+
 ## Interpretation Rapide
 
 Sur `dvwa-direct`, les attaques non bloquees sont normales: le service n'a pas
